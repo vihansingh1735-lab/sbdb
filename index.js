@@ -175,25 +175,43 @@ async function checkUsers() {
 
 // ================== SLASH COMMANDS ==================
 const commands = [
-  new SlashCommandBuilder()
-    .setName("add")
-    .setDescription("Track a Roblox user")
-    .addUserOption(o => o.setName("user").setRequired(true))
-    .addStringOption(o =>
-      o.setName("username").setDescription("Roblox username").setRequired(true)
-    ),
+new SlashCommandBuilder()
+  .setName("add")
+  .setDescription("Track a Roblox user")
+  .addUserOption(o =>
+    o
+      .setName("user")
+      .setDescription("Discord user to track")
+      .setRequired(true)
+  )
+  .addStringOption(o =>
+    o
+      .setName("username")
+      .setDescription("Roblox username")
+      .setRequired(true)
+  ), 
 
   new SlashCommandBuilder()
-    .setName("remove")
-    .setDescription("Remove tracked user")
-    .addUserOption(o => o.setName("user").setRequired(true)),
+  .setName("remove")
+  .setDescription("Remove tracked user")
+  .addUserOption(o =>
+    o
+      .setName("user")
+      .setDescription("User to remove")
+      .setRequired(true)
+  ), 
 
   new SlashCommandBuilder().setName("list").setDescription("List tracked users"),
 
   new SlashCommandBuilder()
-    .setName("stats")
-    .setDescription("Show playtime stats")
-    .addUserOption(o => o.setName("user")),
+  .setName("stats")
+  .setDescription("Show playtime stats")
+  .addUserOption(o =>
+    o
+      .setName("user")
+      .setDescription("User to view stats for")
+      .setRequired(false)
+  )
 
   new SlashCommandBuilder()
     .setName("leaderboard")
