@@ -174,7 +174,10 @@ async function checkUsers() {
         .setTimestamp()
     ]
   });
-      }
+      } // <-- closes LEAVE if
+    }   // <-- closes for (did in guild.tracked)
+  }     // <-- closes for (guildId in data.guilds)
+}       // <-- closes checkUsers()
 
 // ================== SLASH COMMANDS ==================
 const commands = [
