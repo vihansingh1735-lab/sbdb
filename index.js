@@ -58,9 +58,18 @@ const save = () =>
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
 function getGuild(guildId) {
+  if (!guildId) return null; // ✅ PREVENT CRASH
+
   if (!data.guilds[guildId]) {
-    data.guilds[guildId] = { tracked: {} };
+    data.guilds[guildId] = {
+      tracked: {},
+      playtime: {},
+      channels: {},
+      lastPresence: {}
+    };
+    save();
   }
+
   return data.guilds[guildId];
 }
 
