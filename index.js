@@ -211,7 +211,7 @@ new SlashCommandBuilder()
       .setName("user")
       .setDescription("User to view stats for")
       .setRequired(false)
-  )
+  ), 
 
   new SlashCommandBuilder()
     .setName("leaderboard")
