@@ -176,7 +176,9 @@ if (u.state === "ingame" && presence?.userPresenceType !== 2) {
     ]
   });
 }
-
+}                                  // ✅ closes user loop
+  }                                    // ✅ closes guild loop
+}                                      // ✅ closes function
 // ================== SLASH COMMANDS ==================
 const commands = [
 new SlashCommandBuilder()
