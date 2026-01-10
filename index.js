@@ -146,7 +146,7 @@ if (presence?.userPresenceType === 2 && u.state !== "ingame") {
 }
 
 // ================= LEAVE =================
-if (u.state === "ingame" && presence?.userPresenceType !== 2) {
+if (u.state === "ingame" && (!presence || presence.userPresenceType !== 2)) {
   if (!u.join) {
     u.state = "offline";
     save();
