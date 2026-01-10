@@ -202,6 +202,8 @@ const commands = [
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
+  data.messages[discordId] = null;
+save();
   new SlashCommandBuilder()
     .setName("stats")
     .setDescription("View your playtime stats"),
