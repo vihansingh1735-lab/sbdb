@@ -146,7 +146,7 @@ const displayName = data.tracked[discordId].displayName;
     pt.monthly += 60;
 
     const embed = new EmbedBuilder()
-      .setTitle(presence.lastLocation || "Roblox User")
+      .setTitle(displayName)
       .setURL(`https://www.roblox.com/users/${robloxId}/profile`)
       .setThumbnail(await getAvatar(robloxId))
       .setColor(0x00ff88)
