@@ -239,7 +239,7 @@ const commands = [
         { name: "Weekly", value: "weekly" },
         { name: "Monthly", value: "monthly" }
       )
-  )
+  ), 
   new SlashCommandBuilder()
     .setName("activitycheck")
     .setDescription("Start activity check")
