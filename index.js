@@ -201,7 +201,7 @@ const commands = [
     .setDescription("Track a Roblox user")
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
-    ),
+    ],
   save();
   data.messages[discordId] = null;
   new SlashCommandBuilder()
