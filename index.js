@@ -153,6 +153,7 @@ const commands = [
     .setDescription("Top playtime")
     .addStringOption(o =>
       o.setName("type")
+      .setDescription("Leaderboard Type") 
         .setRequired(true)
         .addChoices(
           { name: "Daily", value: "daily" },
