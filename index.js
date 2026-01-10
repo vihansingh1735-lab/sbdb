@@ -283,6 +283,7 @@ if (i.commandName === "list") {
     await i.channel.send(msg);
   }
 }
+  });
 // ================== PREFIX ==================
 client.on("messageCreate", m => {
   if (m.author.bot || !m.content.startsWith(PREFIX)) return;
