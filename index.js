@@ -125,53 +125,56 @@ async function checkUsers() {
       }
 
       // JOIN
-      if (presence?.userPresenceType === 2 && u.state !== "ingame") {
-        u.state = "ingame";
-        u.join = now;
-        u.game = presence.lastLocation || "Roblox";
-        save();
+      if (presence?.userPresenceType === 2) {
+  // If bot restarted or join missing, recover join time
+  if (u.state !== "ingame" || !u.join) {
+    u.state = "ingame";
+    u.join = Date.now();
+    u.game = presence.lastLocation || "Roblox";
+    save();
 
-        channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0x2ecc71)
-              .setTitle(u.displayName)
-              .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
-              .setThumbnail(await getAvatar(u.robloxId))
-              .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
-              .setTimestamp()
-          ]
-        });
+    channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setTitle(u.displayName)
+          .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
+          .setTimestamp()
+      ]
+    });
+  }
       }
 
       // LEAVE
-      if (
-        (!presence || presence.userPresenceType !== 2) &&
-        u.state === "ingame"
-      ) {
-        const played = Math.floor((now - u.join) / 1000);
-        u.stats.daily += played;
-        u.stats.weekly += played;
-        u.stats.total += played;
-        u.state = "offline";
-        u.join = null;
-        save();
-
-        channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xe74c3c)
-              .setTitle(u.displayName)
-              .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
-              .setThumbnail(await getAvatar(u.robloxId))
-              .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
-              .setTimestamp()
-          ]
-        });
-      }
-    }
+      if (u.state === "ingame" && (!presence || presence.userPresenceType !== 2)) {
+  if (!u.join) {
+    // Safety fallback
+    u.state = "offline";
+    save();
+    return;
   }
-}
+
+  const played = Math.floor((Date.now() - u.join) / 1000);
+
+  u.stats.daily += played;
+  u.stats.weekly += played;
+  u.stats.total += played;
+
+  u.state = "offline";
+  u.join = null;
+  u.game = null;
+  save();
+
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe74c3c)
+        .setTitle(u.displayName)
+        .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
+        .setTimestamp()
+    ]
+  });
+      }
 
 // ================== SLASH COMMANDS ==================
 const commands = [
