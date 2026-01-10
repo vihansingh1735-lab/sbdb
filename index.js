@@ -1,12 +1,9 @@
-// ===== OPTIONAL (only if using dotenv) =====
-// require("dotenv").config();
-
-// ===== KEEPALIVE (RENDER) =====
+// ===== KEEPALIVE (Render / Katabump) =====
 const express = require("express");
 const app = express();
 app.get("/", (_, res) => res.send("Bot alive"));
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Web alive on", PORT));
+app.listen(PORT);
 
 // ===== IMPORTS =====
 const {
@@ -74,16 +71,14 @@ async function getAvatar(userId) {
   return d.data?.[0]?.imageUrl || null;
 }
 
-// ===== TIME HELPERS =====
-const now = () => Date.now();
+// ===== HELPERS =====
 const dayId = () => new Date().toDateString();
 const weekId = () => {
   const d = new Date();
-  return `${d.getFullYear()}-W${Math.ceil(
+  return `${d.getFullYear()}-${Math.ceil(
     ((d - new Date(d.getFullYear(), 0, 1)) / 86400000 +
       new Date(d.getFullYear(), 0, 1).getDay() +
-      1) /
-      7
+      1) / 7
   )}`;
 };
 const monthId = () =>
@@ -91,13 +86,9 @@ const monthId = () =>
 
 const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
 
-// ===== GAME RESOLVER =====
 function resolveGame(p) {
   if (p.placeId && GAME_MAP[p.placeId]) return GAME_MAP[p.placeId];
-  if (
-    typeof p.lastLocation === "string" &&
-    !["In Game", "Website"].includes(p.lastLocation)
-  )
+  if (p.lastLocation && !["In Game", "Website"].includes(p.lastLocation))
     return p.lastLocation;
   return "Playing Roblox 🎮";
 }
@@ -105,8 +96,7 @@ function resolveGame(p) {
 // ===== TRACK LOOP =====
 async function checkUsers() {
   for (const discordId in data.tracked) {
-    const robloxId = data.tracked[discordId].robloxId;
-const displayName = data.tracked[discordId].displayName;
+    const { robloxId, displayName } = data.tracked[discordId];
     const channelId = data.channels[discordId];
     if (!channelId) continue;
 
@@ -115,7 +105,6 @@ const displayName = data.tracked[discordId].displayName;
 
     const presence = await getPresence(robloxId);
 
-    // init playtime
     data.playtime[discordId] ??= {
       daily: 0,
       weekly: 0,
@@ -127,59 +116,40 @@ const displayName = data.tracked[discordId].displayName;
 
     const pt = data.playtime[discordId];
 
-    // reset if needed
     if (pt.d !== dayId()) (pt.daily = 0), (pt.d = dayId());
     if (pt.w !== weekId()) (pt.weekly = 0), (pt.w = weekId());
     if (pt.m !== monthId()) (pt.monthly = 0), (pt.m = monthId());
 
-    if (!presence) continue; {
+    // OFFLINE → delete embed
+    if (!presence || presence.userPresenceType !== 2) {
       if (data.messages[discordId]) {
-        channel.messages.delete(data.messages[discordId]).catch(() => {});
+        await channel.messages
+          .delete(data.messages[discordId])
+          .catch(() => {});
         delete data.messages[discordId];
         save();
       }
       continue;
     }
 
+    // ONLINE → track time
     pt.daily += 60;
     pt.weekly += 60;
     pt.monthly += 60;
 
-    async function buildAgentBloxEmbed(displayName, robloxId, presence, playtime) {
-  const profileUrl = `https://www.roblox.com/users/${robloxId}/profile`;
-  const avatar = await getAvatar(robloxId);
-
-  const game =
-    presence.placeId && GAME_MAP[presence.placeId]
-      ? GAME_MAP[presence.placeId]
-      : (presence.lastLocation &&
-         presence.lastLocation !== "In Game" &&
-         presence.lastLocation !== "Website")
-        ? presence.lastLocation
-        : "Playing Roblox";
-
-  return new EmbedBuilder()
-    .setColor(0x2ecc71) // AgentBlox green
-    .setTitle(displayName)          // 👈 Display name
-    .setURL(profileUrl)             // 👈 Clickable title
-    .setThumbnail(avatar)
-    .addFields(
-      {
-        name: "Game",
-        value: `**${game}**`,
-        inline: false
-      },
-      {
-        name: "Playtime",
-        value: formatTime(playtime),
-        inline: false
-      }
-    )
-    .setFooter({
-      text: "Roblox Presence • Live Tracking"
-    })
-    .setTimestamp();
-    }
+    const embed = new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setTitle(displayName)
+      .setURL(`https://www.roblox.com/users/${robloxId}/profile`)
+      .setThumbnail(await getAvatar(robloxId))
+      .addFields(
+        { name: "Game", value: `**${resolveGame(presence)}**` },
+        { name: "Today", value: fmt(pt.daily) },
+        { name: "Week", value: fmt(pt.weekly) },
+        { name: "Month", value: fmt(pt.monthly) }
+      )
+      .setFooter({ text: "Roblox Live Presence • updates every 1 minute" })
+      .setTimestamp();
 
     if (data.messages[discordId]) {
       const msg = await channel.messages
@@ -201,26 +171,10 @@ const commands = [
     .setDescription("Track a Roblox user")
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
-    ],
-  save();
-  data.messages[discordId] = null;
+    ),
   new SlashCommandBuilder()
     .setName("stats")
-    .setDescription("View your playtime stats"),
-  new SlashCommandBuilder()
-    .setName("leaderboard")
-    .setDescription("View playtime leaderboard")
-    .addStringOption(o =>
-      o
-        .setName("type")
-        .setDescription("daily / weekly / monthly")
-        .setRequired(true)
-        .addChoices(
-          { name: "Daily", value: "daily" },
-          { name: "Weekly", value: "weekly" },
-          { name: "Monthly", value: "monthly" }
-        )
-    )
+    .setDescription("View your playtime stats")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -234,7 +188,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 // ===== READY =====
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity("tracking Roblox playtime", {
+  client.user.setActivity("Roblox playtime", {
     type: ActivityType.Watching
   });
   setInterval(checkUsers, CHECK_INTERVAL);
@@ -246,17 +200,22 @@ client.on("interactionCreate", async i => {
 
   if (i.commandName === "add") {
     const user = await getRobloxUser(i.options.getString("username"));
-    if (!user) return i.reply({ content: "User not found", ephemeral: true });
+    if (!user)
+      return i.reply({ content: "User not found", ephemeral: true });
 
     data.tracked[i.user.id] = {
-  robloxId: user.id,
-  displayName: user.displayName || user.name
-};
+      robloxId: user.id,
+      displayName: user.displayName || user.name
+    };
     data.channels[i.user.id] = i.channelId;
     save();
 
-    i.reply(`Tracking **${user.name}**`);
-    checkUsers();
+    await i.reply({
+      content: `✅ Tracking **${user.name}**`,
+      ephemeral: true
+    });
+
+    checkUsers(); // send immediately
   }
 
   if (i.commandName === "stats") {
@@ -269,20 +228,6 @@ client.on("interactionCreate", async i => {
         pt.weekly
       )}\nMonth: ${fmt(pt.monthly)}`
     );
-  }
-
-  if (i.commandName === "leaderboard") {
-    const type = i.options.getString("type");
-    const list = Object.entries(data.playtime)
-      .sort((a, b) => b[1][type] - a[1][type])
-      .slice(0, 10)
-      .map(
-        ([id, v], i) =>
-          `**${i + 1}.** <@${id}> — ${fmt(v[type])}`
-      )
-      .join("\n");
-
-    i.reply(`🏆 **${type.toUpperCase()} Leaderboard**\n${list || "No data"}`);
   }
 });
 
