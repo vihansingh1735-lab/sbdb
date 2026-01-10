@@ -275,9 +275,8 @@ client.on("interactionCreate", async i => {
     )
       return i.reply({ content: "Admin or bot owner only", ephemeral: true });
 
-    i.reply({ content: "Activity check started", ephemeral: true });
-    startActivityCheck(i.channel);
-  }
+i.reply({ content: "Activity check started", ephemeral: true });
+startActivityCheck(i.channel);
 
   if (i.commandName === "add") {
     const u = await getRobloxUser(i.options.getString("username"));
