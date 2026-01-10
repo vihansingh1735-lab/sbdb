@@ -21,6 +21,7 @@ const fs = require("fs");
 // ================= CONFIG =================
 const PREFIX = "!";
 const CHECK_INTERVAL = 60_000;
+const BOT_OWNER_ID = "1426918952906522786"; // 🔴 CHANGE IF NEEDED
 
 // ================= FILES =================
 const DATA_FILE = "./data.json";
@@ -55,6 +56,7 @@ function saveActivityDB(db) {
 }
 
 // ================= HELPERS =================
+const isBotOwner = id => id === BOT_OWNER_ID;
 const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
 const dayId = () => new Date().toDateString();
 const weekId = () => {
@@ -67,8 +69,6 @@ const weekId = () => {
 };
 const monthId = () =>
   `${new Date().getFullYear()}-${new Date().getMonth() + 1}`;
-
-const isOwner = m => m.guild.ownerId === m.id;
 
 // ================= CLIENT =================
 const client = new Client({
@@ -201,7 +201,7 @@ async function startActivityCheck(channel) {
     if (winners.length === 3) collector.stop("DONE");
   });
 
-  collector.on("end", async (_, reason) => {
+  collector.on("end", (_, reason) => {
     if (reason !== "DONE")
       return channel.send("⏳ Not enough participants.");
 
@@ -245,7 +245,6 @@ const commands = [
   new SlashCommandBuilder()
     .setName("activitycheck")
     .setDescription("Start activity check")
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
 ].map(c => c.toJSON());
 
 // ================= REGISTER =================
@@ -259,13 +258,26 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 // ================= READY =================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity("Roblox Tracking", { type: ActivityType.Watching });
+  client.user.setActivity("Roblox Tracking", {
+    type: ActivityType.Watching
+  });
   setInterval(checkUsers, CHECK_INTERVAL);
 });
 
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
+
+  if (i.commandName === "activitycheck") {
+    if (
+      !isBotOwner(i.user.id) &&
+      !i.member.permissions.has(PermissionsBitField.Flags.Administrator)
+    )
+      return i.reply({ content: "Admin or bot owner only", ephemeral: true });
+
+    i.reply({ content: "Activity check started", ephemeral: true });
+    startActivityCheck(i.channel);
+  }
 
   if (i.commandName === "add") {
     const u = await getRobloxUser(i.options.getString("username"));
@@ -306,19 +318,6 @@ client.on("interactionCreate", async i => {
       .join("\n");
     i.reply(`🏆 ${t.toUpperCase()} Leaderboard\n${list || "No data"}`);
   }
-
-  if (i.commandName === "activitycheck") {
-    if (
-      !i.member.permissions.has(
-        PermissionsBitField.Flags.Administrator
-      ) &&
-      !isOwner(i.member)
-    )
-      return i.reply({ content: "Admin or owner only", ephemeral: true });
-
-    i.reply({ content: "Activity check started", ephemeral: true });
-    startActivityCheck(i.channel);
-  }
 });
 
 // ================= PREFIX =================
@@ -326,12 +325,12 @@ client.on("messageCreate", m => {
   if (m.author.bot || !m.content.startsWith(PREFIX)) return;
   if (m.content === "!activitycheck") {
     if (
+      !isBotOwner(m.author.id) &&
       !m.member.permissions.has(
         PermissionsBitField.Flags.Administrator
-      ) &&
-      !isOwner(m.member)
+      )
     )
-      return m.reply("Admin or owner only");
+      return m.reply("Admin or bot owner only");
     startActivityCheck(m.channel);
   }
 });
