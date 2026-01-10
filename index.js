@@ -76,7 +76,19 @@ const client = new Client({
 // ================== ACTIVITY CHECK ==================
 async function startActivityCheck(channel) {
   const msg = await channel.send(
-    "@everyone 📢 **ACTIVITY CHECK!**\nReact with ✅ — first **3 win**"
+    "@everyone
+
+ACTIVITY CHECK
+
+
+
+Let's keep this server alive and thriving! React ✅ to show you're active.
+
+Top 3 responders will be highlighted !
+
+
+
+Help us keep the community strong and engaging 💬🎉**"
   );
   await msg.react("✅");
 
