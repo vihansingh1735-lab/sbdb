@@ -404,6 +404,5 @@ Help us keep the community strong and engaging 💬🎉`
       `🥉 <@${third}>`
     );
   });
-  }
 // ================== LOGIN ==================
-client.login(TOKEN);
+client.login(TOKEN)
