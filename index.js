@@ -134,16 +134,16 @@ async function checkUsers() {
     save();
 
     channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x2ecc71)
-          .setTitle(u.displayName)
-          .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
-          .setTimestamp()
-      ]
-    });
-  }
-      }
+  embeds: [
+    new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setTitle(u.displayName)
+      .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`) // ✅ clickable title
+      .setThumbnail(await getAvatar(u.robloxId)) // ✅ avatar thumbnail
+      .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
+      .setTimestamp()
+  ]
+});
 
       // LEAVE
       if (u.state === "ingame" && (!presence || presence.userPresenceType !== 2)) {
@@ -166,14 +166,16 @@ async function checkUsers() {
   save();
 
   channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(0xe74c3c)
-        .setTitle(u.displayName)
-        .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
-        .setTimestamp()
-    ]
-  });
+  embeds: [
+    new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle(u.displayName)
+      .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`) // ✅ clickable title
+      .setThumbnail(await getAvatar(u.robloxId)) // ✅ avatar thumbnail
+      .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
+      .setTimestamp()
+  ]
+});
       } // <-- closes LEAVE if
     }   // <-- closes for (did in guild.tracked)
   }     // <-- closes for (guildId in data.guilds)
