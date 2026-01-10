@@ -315,9 +315,9 @@ startActivityCheck(i.channel);
       .slice(0, 10)
       .map(([id, v], i) => `**${i + 1}.** <@${id}> — ${fmt(v[t])}`)
       .join("\n");
-    i.reply(`🏆 ${t.toUpperCase()} Leaderboard\n${list || "No data"}`);
+    i.reply(`🏆 ${t.toUpperCase()} Leaderboard\n${list || "No data"}`
+   );
   }
-});
 
 // ================= PREFIX =================
 client.on("messageCreate", m => {
