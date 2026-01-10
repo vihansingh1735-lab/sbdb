@@ -227,18 +227,19 @@ const commands = [
   new SlashCommandBuilder().setName("remove").setDescription("Stop tracking"),
   new SlashCommandBuilder().setName("stats").setDescription("View playtime"),
   new SlashCommandBuilder()
-    .setName("leaderboard")
-    .setDescription("View leaderboard")
-    .addStringOption(o =>
-      o
-        .setName("type")
-        .setRequired(true)
-        .addChoices(
-          { name: "Daily", value: "daily" },
-          { name: "Weekly", value: "weekly" },
-          { name: "Monthly", value: "monthly" }
-        )
-    ),
+  .setName("leaderboard")
+  .setDescription("View playtime leaderboard")
+  .addStringOption(o =>
+    o
+      .setName("type")
+      .setDescription("Which leaderboard to show") // 🔥 REQUIRED
+      .setRequired(true)
+      .addChoices(
+        { name: "Daily", value: "daily" },
+        { name: "Weekly", value: "weekly" },
+        { name: "Monthly", value: "monthly" }
+      )
+  )
   new SlashCommandBuilder()
     .setName("activitycheck")
     .setDescription("Start activity check")
