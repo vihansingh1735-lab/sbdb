@@ -75,7 +75,7 @@ const client = new Client({
 
 // ================== ACTIVITY CHECK ==================
 async function startActivityCheck(channel) {
-  const msg = await channel.send("@everyone
+  const msg = await channel.send(`@everyone
 
 ACTIVITY CHECK
 
@@ -87,7 +87,7 @@ Top 3 responders will be highlighted !
 
 
 
-Help us keep the community strong and engaging 💬🎉**");
+Help us keep the community strong and engaging 💬🎉**`);
   await msg.react("✅");
 
   const winners = new Set();
