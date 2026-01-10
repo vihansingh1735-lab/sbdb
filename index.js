@@ -145,19 +145,41 @@ const displayName = data.tracked[discordId].displayName;
     pt.weekly += 60;
     pt.monthly += 60;
 
-    const embed = new EmbedBuilder()
-      .setTitle(displayName)
-      .setURL(`https://www.roblox.com/users/${robloxId}/profile`)
-      .setThumbnail(await getAvatar(robloxId))
-      .setColor(0x00ff88)
-      .addFields(
-        { name: "Game", value: resolveGame(presence), inline: true },
-        { name: "Today", value: fmt(pt.daily), inline: true },
-        { name: "Week", value: fmt(pt.weekly), inline: true },
-        { name: "Month", value: fmt(pt.monthly), inline: true }
-      )
-      .setFooter({ text: "Updates every 1 minute" })
-      .setTimestamp();
+    async function buildAgentBloxEmbed(displayName, robloxId, presence, playtime) {
+  const profileUrl = `https://www.roblox.com/users/${robloxId}/profile`;
+  const avatar = await getAvatar(robloxId);
+
+  const game =
+    presence.placeId && GAME_MAP[presence.placeId]
+      ? GAME_MAP[presence.placeId]
+      : (presence.lastLocation &&
+         presence.lastLocation !== "In Game" &&
+         presence.lastLocation !== "Website")
+        ? presence.lastLocation
+        : "Playing Roblox";
+
+  return new EmbedBuilder()
+    .setColor(0x2ecc71) // AgentBlox green
+    .setTitle(displayName)          // 👈 Display name
+    .setURL(profileUrl)             // 👈 Clickable title
+    .setThumbnail(avatar)
+    .addFields(
+      {
+        name: "Game",
+        value: `**${game}**`,
+        inline: false
+      },
+      {
+        name: "Playtime",
+        value: formatTime(playtime),
+        inline: false
+      }
+    )
+    .setFooter({
+      text: "Roblox Presence • Live Tracking"
+    })
+    .setTimestamp();
+    }
 
     if (data.messages[discordId]) {
       const msg = await channel.messages
