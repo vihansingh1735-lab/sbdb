@@ -153,6 +153,9 @@ const commands = [
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
   new SlashCommandBuilder()
+  .setName("list")
+  .setDescription("Show all added Roblox users"),
+  new SlashCommandBuilder()
     .setName("remove")
     .setDescription("Stop tracking"),
   new SlashCommandBuilder()
@@ -190,6 +193,28 @@ client.once("ready", () => {
   setInterval(checkUsers, CHECK_INTERVAL);
 });
 
+
+async function buildListEmbed(user) {
+  const profileUrl = `https://www.roblox.com/users/${user.robloxId}/profile`;
+
+  const r = await fetch(
+    `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${user.robloxId}&size=420x420&format=Png`
+  );
+  const j = await r.json();
+  const avatar = j.data?.[0]?.imageUrl;
+
+  return {
+    embeds: [
+      {
+        color: 0xffd400,
+        title: user.displayName,
+        url: profileUrl,
+        thumbnail: { url: avatar },
+        description: `🔗 [View Roblox Profile](${profileUrl})`
+      }
+    ]
+  };
+}
 // ================== INTERACTIONS ==================
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
@@ -245,7 +270,19 @@ Month: ${fmt(pt.monthly)}`
     i.reply(`🏆 **${t.toUpperCase()}**\n${list || "No data"}`);
   }
 });
+if (i.commandName === "list") {
+  const users = Object.values(data.tracked);
 
+  if (!users.length)
+    return i.reply({ content: "No users added yet.", ephemeral: true });
+
+  await i.reply({ content: "📋 **Added Roblox Users**" });
+
+  for (const u of users) {
+    const msg = await buildListEmbed(u);
+    await i.channel.send(msg);
+  }
+}
 // ================== PREFIX ==================
 client.on("messageCreate", m => {
   if (m.author.bot || !m.content.startsWith(PREFIX)) return;
