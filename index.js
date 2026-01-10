@@ -269,7 +269,6 @@ Month: ${fmt(pt.monthly)}`
 
     i.reply(`🏆 **${t.toUpperCase()}**\n${list || "No data"}`);
   }
-});
 if (i.commandName === "list") {
   const users = Object.values(data.tracked);
 
