@@ -244,8 +244,16 @@ client.once("ready", () => {
 // ================== INTERACTIONS ==================
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
-  const guild = getGuild(i.guildId);
 
+  // 🚫 Block DMs (FIXES YOUR CRASH)
+  if (!i.guildId) {
+    return i.reply({
+      content: "❌ This command can only be used in servers.",
+      ephemeral: true
+    });
+  }
+
+  const guild = getGuild(i.guildId);
   // ADD
   if (i.commandName === "add") {
     const target = i.options.getUser("user");
