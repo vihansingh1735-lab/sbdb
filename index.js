@@ -27,22 +27,14 @@ const OWNER_ID = process.env.OWNER_ID;
 const CHECK_INTERVAL = 30_000;
 const DB_FILE = "./data.json";
 
-// ================== GAME ICONS ==================
-const GAME_ICONS = {
-  "Emergency Hamburg": "https://tr.rbxcdn.com/0f1f3b0d1f.png",
-  "Brookhaven": "https://tr.rbxcdn.com/9c7e2c.png",
-  "Adopt Me": "https://tr.rbxcdn.com/ab13f.png"
-};
-const DEFAULT_GAME_ICON =
-  "https://tr.rbxcdn.com/1a2b3c.png";
-
 // ================== HELPERS ==================
 const isOwner = id => id === OWNER_ID;
 const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
+
 const dayKey = () => new Date().toDateString();
 const weekKey = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${Math.ceil(
+  return `${d.getFullYear()}-W${Math.ceil(
     ((d - new Date(d.getFullYear(), 0, 1)) / 86400000 +
       new Date(d.getFullYear(), 0, 1).getDay() +
       1) / 7
@@ -58,18 +50,12 @@ const save = () =>
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
 function getGuild(guildId) {
-  if (!guildId) return null; // ✅ PREVENT CRASH
+  if (!guildId) return null;
 
   if (!data.guilds[guildId]) {
-    data.guilds[guildId] = {
-      tracked: {},
-      playtime: {},
-      channels: {},
-      lastPresence: {}
-    };
+    data.guilds[guildId] = { tracked: {} };
     save();
   }
-
   return data.guilds[guildId];
 }
 
@@ -111,6 +97,33 @@ const client = new Client({
   ]
 });
 
+// ================== ACTIVITY CHECK ==================
+async function startActivityCheck(channel) {
+  const msg = await channel.send(
+    "@everyone **ACTIVITY CHECK**\nReact ✅ to confirm activity"
+  );
+  await msg.react("✅");
+
+  const users = new Set();
+  const collector = msg.createReactionCollector({
+    filter: (r, u) => r.emoji.name === "✅" && !u.bot,
+    time: 10 * 60 * 1000
+  });
+
+  collector.on("collect", (_, user) => users.add(user.id));
+
+  collector.on("end", () => {
+    if (!users.size)
+      channel.send("❌ No one responded.");
+    else
+      channel.send(
+        `✅ **Active users:** ${[...users]
+          .map(id => `<@${id}>`)
+          .join(", ")}`
+      );
+  });
+}
+
 // ================== TRACK LOOP ==================
 async function checkUsers() {
   for (const guildId in data.guilds) {
@@ -126,7 +139,6 @@ async function checkUsers() {
 
       const now = Date.now();
 
-      // Reset day/week
       if (u.stats.day !== dayKey()) {
         u.stats.day = dayKey();
         u.stats.daily = 0;
@@ -143,15 +155,21 @@ async function checkUsers() {
         u.game = presence.lastLocation || "Roblox";
         save();
 
-        const embed = new EmbedBuilder()
-          .setColor(0x2ecc71)
-          .setTitle(u.displayName)
-          .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
-          .setThumbnail(await getAvatar(u.robloxId))
-          .setDescription(`🟢 **Joined**\n🎮 ${u.game}`)
-          .setTimestamp();
-
-        channel.send({ embeds: [embed] });
+        channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x2ecc71)
+              .setTitle(u.displayName)
+              .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
+              .setThumbnail(await getAvatar(u.robloxId))
+              .setDescription(
+                `🟢 **Joined Game**\n🎮 ${u.game}\n⏱ Previous: ${fmt(
+                  u.lastSession || 0
+                )}`
+              )
+              .setTimestamp()
+          ]
+        });
       }
 
       // LEAVE
@@ -164,22 +182,23 @@ async function checkUsers() {
         u.stats.daily += played;
         u.stats.weekly += played;
         u.stats.total += played;
+        u.lastSession = played;
 
         u.state = "offline";
         u.join = null;
         save();
 
-        const embed = new EmbedBuilder()
-          .setColor(0xe74c3c)
-          .setTitle(u.displayName)
-          .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
-          .setThumbnail(await getAvatar(u.robloxId))
-          .setDescription(
-            `🔴 **Left Game**\n⏱ ${fmt(played)}`
-          )
-          .setTimestamp();
-
-        channel.send({ embeds: [embed] });
+        channel.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xe74c3c)
+              .setTitle(u.displayName)
+              .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
+              .setThumbnail(await getAvatar(u.robloxId))
+              .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
+              .setTimestamp()
+          ]
+        });
       }
     }
   }
@@ -253,17 +272,14 @@ client.once("ready", () => {
 // ================== INTERACTIONS ==================
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
-
-  // 🚫 Block DMs (FIXES YOUR CRASH)
-  if (!i.guildId) {
+  if (!i.guildId)
     return i.reply({
-      content: "❌ This command can only be used in servers.",
+      content: "Commands only work in servers",
       ephemeral: true
     });
-  }
 
   const guild = getGuild(i.guildId);
-  // ADD
+
   if (i.commandName === "add") {
     const target = i.options.getUser("user");
     const rbx = await getRobloxUser(i.options.getString("username"));
@@ -276,6 +292,7 @@ client.on("interactionCreate", async i => {
       channelId: i.channelId,
       state: "offline",
       join: null,
+      lastSession: 0,
       game: null,
       stats: {
         daily: 0,
@@ -289,88 +306,84 @@ client.on("interactionCreate", async i => {
     return i.reply({ content: "User added", ephemeral: true });
   }
 
-  // REMOVE
   if (i.commandName === "remove") {
-    const target = i.options.getUser("user");
-    delete guild.tracked[target.id];
+    delete guild.tracked[i.options.getUser("user").id];
     save();
     return i.reply({ content: "User removed", ephemeral: true });
   }
 
-  // LIST
   if (i.commandName === "list") {
     const users = Object.values(guild.tracked);
     if (!users.length)
       return i.reply({ content: "No users tracked", ephemeral: true });
 
     for (const u of users) {
-      const embed = new EmbedBuilder()
-        .setColor(0xf1c40f)
-        .setTitle(u.displayName)
-        .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
-        .setThumbnail(await getAvatar(u.robloxId));
-      await i.channel.send({ embeds: [embed] });
+      await i.channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle(u.displayName)
+            .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
+            .setThumbnail(await getAvatar(u.robloxId))
+        ]
+      });
     }
     return i.reply({ content: "Listed", ephemeral: true });
   }
 
-  // STATS
   if (i.commandName === "stats") {
     const user = i.options.getUser("user") || i.user;
     const u = guild.tracked[user.id];
     if (!u)
       return i.reply({ content: "User not tracked", ephemeral: true });
 
-    const embed = new EmbedBuilder()
-      .setColor(0x3498db)
-      .setTitle(u.displayName)
-      .setDescription(
-        `📅 Daily: ${fmt(u.stats.daily)}\n` +
-        `📆 Weekly: ${fmt(u.stats.weekly)}\n` +
-        `🏆 Total: ${fmt(u.stats.total)}`
-      );
-    return i.reply({ embeds: [embed] });
+    return i.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x3498db)
+          .setTitle(u.displayName)
+          .setDescription(
+            `📅 Daily: ${fmt(u.stats.daily)}\n📆 Weekly: ${fmt(
+              u.stats.weekly
+            )}\n🏆 Total: ${fmt(u.stats.total)}`
+          )
+      ]
+    });
   }
 
-  // LEADERBOARD
   if (i.commandName === "leaderboard") {
     const type = i.options.getString("type");
     const entries = Object.entries(guild.tracked)
       .sort((a, b) => b[1].stats[type] - a[1].stats[type])
       .slice(0, 10);
 
-    if (!entries.length)
-      return i.reply({ content: "No data", ephemeral: true });
-
-    const desc = entries
-      .map(
-        ([id, u], i) =>
-          `**${i + 1}.** <@${id}> — ${fmt(u.stats[type])}`
-      )
-      .join("\n");
-
     return i.reply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xf39c12)
           .setTitle(`🏆 ${type.toUpperCase()} Leaderboard`)
-          .setDescription(desc)
+          .setDescription(
+            entries
+              .map(
+                ([id, u], i) =>
+                  `**${i + 1}.** <@${id}> — ${fmt(u.stats[type])}`
+              )
+              .join("\n") || "No data"
+          )
       ]
     });
   }
 
-  // ACTIVITY CHECK
   if (i.commandName === "activitycheck") {
     if (
       !isOwner(i.user.id) &&
-      !i.member.permissions.has(PermissionsBitField.Flags.Administrator)
+      !i.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
     )
       return i.reply({ content: "No permission", ephemeral: true });
 
-    const msg = await i.channel.send(
-      "@everyone **ACTIVITY CHECK**\nReact ✅"
-    );
-    await msg.react("✅");
+    await startActivityCheck(i.channel);
     return i.reply({ content: "Started", ephemeral: true });
   }
 });
@@ -380,7 +393,9 @@ client.on("messageCreate", m => {
   if (m.author.bot || m.content !== "!activitycheck") return;
   if (
     !isOwner(m.author.id) &&
-    !m.member.permissions.has(PermissionsBitField.Flags.Administrator)
+    !m.member.permissions.has(
+      PermissionsBitField.Flags.Administrator
+    )
   )
     return m.reply("No permission");
 
