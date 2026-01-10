@@ -1,14 +1,14 @@
 // ================= KEEPALIVE =================
 const express = require("express");
 const app = express();
-app.get("/", (_, res) => res.send("Bot alive"));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT);
+app.get("/", (_, res) => res.send("OK"));
+app.listen(process.env.PORT || 3000);
 
 // ================= IMPORTS =================
 const {
   Client,
   GatewayIntentBits,
+  Partials,
   SlashCommandBuilder,
   REST,
   Routes,
@@ -18,10 +18,13 @@ const {
 } = require("discord.js");
 const fs = require("fs");
 
-// ================= CONSTANTS =================
+// ================= CONFIG =================
+const PREFIX = "!";
 const CHECK_INTERVAL = 60_000;
+
+// ================= FILES =================
 const DATA_FILE = "./data.json";
-const ACTIVITY_DB = "./database.json";
+const ACTIVITY_FILE = "./database.json";
 
 // ================= GAME MAP =================
 const GAME_MAP = {
@@ -31,30 +34,51 @@ const GAME_MAP = {
   2753915549: "Blox Fruits 🍏"
 };
 
-// ================= LOAD DBS =================
+// ================= LOAD DATA =================
 let data = { tracked: {}, channels: {}, messages: {}, playtime: {} };
 if (fs.existsSync(DATA_FILE))
   data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 
-function saveData() {
+const saveData = () =>
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
 
 function loadActivityDB() {
   try {
-    return JSON.parse(fs.readFileSync(ACTIVITY_DB, "utf8"));
+    return JSON.parse(fs.readFileSync(ACTIVITY_FILE, "utf8"));
   } catch {
     return { activityWins: {}, activityReactCount: {} };
   }
 }
 
 function saveActivityDB(db) {
-  fs.writeFileSync(ACTIVITY_DB, JSON.stringify(db, null, 2));
+  fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(db, null, 2));
 }
+
+// ================= HELPERS =================
+const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
+const dayId = () => new Date().toDateString();
+const weekId = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${Math.ceil(
+    ((d - new Date(d.getFullYear(), 0, 1)) / 86400000 +
+      new Date(d.getFullYear(), 0, 1).getDay() +
+      1) / 7
+  )}`;
+};
+const monthId = () =>
+  `${new Date().getFullYear()}-${new Date().getMonth() + 1}`;
+
+const isOwner = m => m.guild.ownerId === m.id;
 
 // ================= CLIENT =================
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 // ================= ROBLOX API =================
@@ -68,59 +92,43 @@ async function getRobloxUser(username) {
   return d.data?.[0] || null;
 }
 
-async function getPresence(userId) {
+async function getPresence(id) {
   const r = await fetch("https://presence.roblox.com/v1/presence/users", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userIds: [userId] })
+    body: JSON.stringify({ userIds: [id] })
   });
   const d = await r.json();
   return d.userPresences?.[0] || null;
 }
 
-async function getAvatar(userId) {
+async function getAvatar(id) {
   const r = await fetch(
-    `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=420x420&format=Png`
+    `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${id}&size=420x420&format=Png`
   );
   const d = await r.json();
   return d.data?.[0]?.imageUrl || null;
 }
 
-// ================= HELPERS =================
-const dayId = () => new Date().toDateString();
-const weekId = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${Math.ceil(
-    ((d - new Date(d.getFullYear(), 0, 1)) / 86400000 +
-      new Date(d.getFullYear(), 0, 1).getDay() +
-      1) / 7
-  )}`;
-};
-const monthId = () =>
-  `${new Date().getFullYear()}-${new Date().getMonth() + 1}`;
-
-const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
-
-function resolveGame(p) {
-  if (p.placeId && GAME_MAP[p.placeId]) return GAME_MAP[p.placeId];
-  if (p.lastLocation && !["In Game", "Website"].includes(p.lastLocation))
-    return p.lastLocation;
-  return "Playing Roblox 🎮";
-}
+const resolveGame = p =>
+  p.placeId && GAME_MAP[p.placeId]
+    ? GAME_MAP[p.placeId]
+    : p.lastLocation && !["In Game", "Website"].includes(p.lastLocation)
+    ? p.lastLocation
+    : "Playing Roblox 🎮";
 
 // ================= TRACK LOOP =================
 async function checkUsers() {
-  for (const discordId in data.tracked) {
-    const { robloxId, displayName } = data.tracked[discordId];
-    const channelId = data.channels[discordId];
-    if (!channelId) continue;
-
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+  for (const id in data.tracked) {
+    const { robloxId, displayName } = data.tracked[id];
+    const channel = await client.channels
+      .fetch(data.channels[id])
+      .catch(() => null);
     if (!channel) continue;
 
     const presence = await getPresence(robloxId);
 
-    data.playtime[discordId] ??= {
+    data.playtime[id] ??= {
       daily: 0,
       weekly: 0,
       monthly: 0,
@@ -129,16 +137,15 @@ async function checkUsers() {
       m: monthId()
     };
 
-    const pt = data.playtime[discordId];
-
+    const pt = data.playtime[id];
     if (pt.d !== dayId()) (pt.daily = 0), (pt.d = dayId());
     if (pt.w !== weekId()) (pt.weekly = 0), (pt.w = weekId());
     if (pt.m !== monthId()) (pt.monthly = 0), (pt.m = monthId());
 
     if (!presence || presence.userPresenceType !== 2) {
-      if (data.messages[discordId]) {
-        await channel.messages.delete(data.messages[discordId]).catch(() => {});
-        delete data.messages[discordId];
+      if (data.messages[id]) {
+        channel.messages.delete(data.messages[id]).catch(() => {});
+        delete data.messages[id];
         saveData();
       }
       continue;
@@ -159,17 +166,14 @@ async function checkUsers() {
         { name: "Week", value: fmt(pt.weekly) },
         { name: "Month", value: fmt(pt.monthly) }
       )
-      .setFooter({ text: "Roblox Live Presence • updates every minute" })
-      .setTimestamp();
+      .setFooter({ text: "Roblox Live Presence • updates every minute" });
 
-    if (data.messages[discordId]) {
-      const msg = await channel.messages
-        .fetch(data.messages[discordId])
-        .catch(() => null);
-      if (msg) await msg.edit({ embeds: [embed] });
+    if (data.messages[id]) {
+      const m = await channel.messages.fetch(data.messages[id]).catch(() => null);
+      if (m) await m.edit({ embeds: [embed] });
     } else {
-      const msg = await channel.send({ embeds: [embed] });
-      data.messages[discordId] = msg.id;
+      const m = await channel.send({ embeds: [embed] });
+      data.messages[id] = m.id;
       saveData();
     }
   }
@@ -182,36 +186,34 @@ async function startActivityCheck(channel) {
       "@everyone 📢 **ACTIVITY CHECK STARTED!**\nReact with ✅\nFirst **3 users** win!",
     allowedMentions: { parse: ["everyone"] }
   });
-
   await msg.react("✅");
 
   const db = loadActivityDB();
-  const winners = new Set();
+  const winners = [];
 
   const collector = msg.createReactionCollector({
     filter: (r, u) => r.emoji.name === "✅" && !u.bot,
     time: 10 * 60 * 1000
   });
 
-  collector.on("collect", (_, user) => {
-    winners.add(user.id);
-    if (winners.size === 3) collector.stop("DONE");
+  collector.on("collect", (_, u) => {
+    if (!winners.includes(u.id)) winners.push(u.id);
+    if (winners.length === 3) collector.stop("DONE");
   });
 
   collector.on("end", async (_, reason) => {
     if (reason !== "DONE")
-      return channel.send("⏳ Activity check failed.");
+      return channel.send("⏳ Not enough participants.");
 
-    const top = [...winners].slice(0, 3);
-    top.forEach(id => {
+    winners.forEach(id => {
       db.activityWins[id] = (db.activityWins[id] || 0) + 1;
       db.activityReactCount[id] =
         (db.activityReactCount[id] || 0) + 1;
     });
     saveActivityDB(db);
 
-    await channel.send(
-      `🏆 **Winners**\n🥇 <@${top[0]}>\n🥈 <@${top[1]}>\n🥉 <@${top[2]}>`
+    channel.send(
+      `🏆 Winners:\n🥇 <@${winners[0]}>\n🥈 <@${winners[1]}>\n🥉 <@${winners[2]}>`
     );
   });
 }
@@ -225,21 +227,21 @@ const commands = [
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
   new SlashCommandBuilder().setName("remove").setDescription("Stop tracking"),
-  new SlashCommandBuilder().setName("stats").setDescription("View playtime"),
+  new SlashCommandBuilder().setName("stats").setDescription("Your playtime"),
   new SlashCommandBuilder()
-  .setName("leaderboard")
-  .setDescription("View playtime leaderboard")
-  .addStringOption(o =>
-    o
-      .setName("type")
-      .setDescription("Which leaderboard to show") // 🔥 REQUIRED
-      .setRequired(true)
-      .addChoices(
-        { name: "Daily", value: "daily" },
-        { name: "Weekly", value: "weekly" },
-        { name: "Monthly", value: "monthly" }
-      )
-  ), 
+    .setName("leaderboard")
+    .setDescription("Playtime leaderboard")
+    .addStringOption(o =>
+      o
+        .setName("type")
+        .setDescription("daily / weekly / monthly")
+        .setRequired(true)
+        .addChoices(
+          { name: "Daily", value: "daily" },
+          { name: "Weekly", value: "weekly" },
+          { name: "Monthly", value: "monthly" }
+        )
+    ),
   new SlashCommandBuilder()
     .setName("activitycheck")
     .setDescription("Start activity check")
@@ -257,7 +259,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 // ================= READY =================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity("Roblox Activity", { type: ActivityType.Watching });
+  client.user.setActivity("Roblox Tracking", { type: ActivityType.Watching });
   setInterval(checkUsers, CHECK_INTERVAL);
 });
 
@@ -266,63 +268,71 @@ client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
 
   if (i.commandName === "add") {
-    const user = await getRobloxUser(i.options.getString("username"));
-    if (!user) return i.reply({ content: "User not found", ephemeral: true });
-
+    const u = await getRobloxUser(i.options.getString("username"));
+    if (!u) return i.reply({ content: "User not found", ephemeral: true });
     data.tracked[i.user.id] = {
-      robloxId: user.id,
-      displayName: user.displayName || user.name
+      robloxId: u.id,
+      displayName: u.displayName || u.name
     };
     data.channels[i.user.id] = i.channelId;
     saveData();
-
-    await i.reply({ content: "✅ Tracking started", ephemeral: true });
+    i.reply({ content: "Tracking started", ephemeral: true });
     checkUsers();
   }
 
   if (i.commandName === "remove") {
     delete data.tracked[i.user.id];
     delete data.playtime[i.user.id];
-    delete data.channels[i.user.id];
     saveData();
-    i.reply({ content: "🗑️ Tracking removed", ephemeral: true });
+    i.reply({ content: "Tracking removed", ephemeral: true });
   }
 
   if (i.commandName === "stats") {
     const pt = data.playtime[i.user.id];
     if (!pt) return i.reply({ content: "No data", ephemeral: true });
-
     i.reply(
-      `📊 Today: ${fmt(pt.daily)}\nWeek: ${fmt(pt.weekly)}\nMonth: ${fmt(
+      `Today: ${fmt(pt.daily)}\nWeek: ${fmt(pt.weekly)}\nMonth: ${fmt(
         pt.monthly
       )}`
     );
   }
 
   if (i.commandName === "leaderboard") {
-    const type = i.options.getString("type");
+    const t = i.options.getString("type");
     const list = Object.entries(data.playtime)
-      .sort((a, b) => b[1][type] - a[1][type])
+      .sort((a, b) => b[1][t] - a[1][t])
       .slice(0, 10)
-      .map(
-        ([id, v], i) =>
-          `**${i + 1}.** <@${id}> — ${fmt(v[type])}`
-      )
+      .map(([id, v], i) => `**${i + 1}.** <@${id}> — ${fmt(v[t])}`)
       .join("\n");
-
-    i.reply(`🏆 **${type.toUpperCase()} Leaderboard**\n${list || "No data"}`);
+    i.reply(`🏆 ${t.toUpperCase()} Leaderboard\n${list || "No data"}`);
   }
 
   if (i.commandName === "activitycheck") {
     if (
       !i.member.permissions.has(
         PermissionsBitField.Flags.Administrator
-      )
-    ) {
-      return i.reply({ content: "Admin only", ephemeral: true });
-    }
-    await i.reply({ content: "Activity check started!", ephemeral: true });
+      ) &&
+      !isOwner(i.member)
+    )
+      return i.reply({ content: "Admin or owner only", ephemeral: true });
+
+    i.reply({ content: "Activity check started", ephemeral: true });
     startActivityCheck(i.channel);
+  }
+});
+
+// ================= PREFIX =================
+client.on("messageCreate", m => {
+  if (m.author.bot || !m.content.startsWith(PREFIX)) return;
+  if (m.content === "!activitycheck") {
+    if (
+      !m.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      ) &&
+      !isOwner(m.member)
+    )
+      return m.reply("Admin or owner only");
+    startActivityCheck(m.channel);
   }
 });
 
