@@ -132,7 +132,7 @@ const displayName = data.tracked[discordId].displayName;
     if (pt.w !== weekId()) (pt.weekly = 0), (pt.w = weekId());
     if (pt.m !== monthId()) (pt.monthly = 0), (pt.m = monthId());
 
-    if (!presence || presence.userPresenceType !== 2) {
+    if (!presence) continue; {
       if (data.messages[discordId]) {
         channel.messages.delete(data.messages[discordId]).catch(() => {});
         delete data.messages[discordId];
