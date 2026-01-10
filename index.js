@@ -13,9 +13,6 @@ const {
   REST,
   Routes,
   EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ActivityType
 } = require("discord.js");
 const fs = require("fs");
@@ -30,7 +27,6 @@ const DB_FILE = "./data.json";
 // ================== HELPERS ==================
 const isOwner = id => id === OWNER_ID;
 const fmt = s => `${Math.floor(s / 60)}m ${s % 60}s`;
-
 const dayKey = () => new Date().toDateString();
 const weekKey = () => {
   const d = new Date();
@@ -44,15 +40,19 @@ const weekKey = () => {
 // ================== DATABASE ==================
 let data = { guilds: {} };
 if (fs.existsSync(DB_FILE)) {
-  data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  try {
+    data = JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  } catch {
+    data = { guilds: {} };
+  }
 }
 const save = () =>
   fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
 function getGuild(guildId) {
   if (!guildId) return null;
-
-  if (!data.guilds[guildId]) {
+  if (!data.guilds) data.guilds = {};
+  if (!data.guilds[guildId] || typeof data.guilds[guildId] !== "object") {
     data.guilds[guildId] = { tracked: {} };
     save();
   }
@@ -97,37 +97,13 @@ const client = new Client({
   ]
 });
 
-// ================== ACTIVITY CHECK ==================
-async function startActivityCheck(channel) {
-  const msg = await channel.send(
-    "@everyone **ACTIVITY CHECK**\nReact ✅ to confirm activity"
-  );
-  await msg.react("✅");
-
-  const users = new Set();
-  const collector = msg.createReactionCollector({
-    filter: (r, u) => r.emoji.name === "✅" && !u.bot,
-    time: 10 * 60 * 1000
-  });
-
-  collector.on("collect", (_, user) => users.add(user.id));
-
-  collector.on("end", () => {
-    if (!users.size)
-      channel.send("❌ No one responded.");
-    else
-      channel.send(
-        `✅ **Active users:** ${[...users]
-          .map(id => `<@${id}>`)
-          .join(", ")}`
-      );
-  });
-}
-
-// ================== TRACK LOOP ==================
+// ================== PRESENCE LOOP ==================
 async function checkUsers() {
+  if (!data.guilds) return;
+
   for (const guildId in data.guilds) {
-    const guild = data.guilds[guildId];
+    const guild = getGuild(guildId);
+    if (!guild?.tracked) continue;
 
     for (const did in guild.tracked) {
       const u = guild.tracked[did];
@@ -162,11 +138,7 @@ async function checkUsers() {
               .setTitle(u.displayName)
               .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
               .setThumbnail(await getAvatar(u.robloxId))
-              .setDescription(
-                `🟢 **Joined Game**\n🎮 ${u.game}\n⏱ Previous: ${fmt(
-                  u.lastSession || 0
-                )}`
-              )
+              .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
               .setTimestamp()
           ]
         });
@@ -178,12 +150,9 @@ async function checkUsers() {
         u.state === "ingame"
       ) {
         const played = Math.floor((now - u.join) / 1000);
-
         u.stats.daily += played;
         u.stats.weekly += played;
         u.stats.total += played;
-        u.lastSession = played;
-
         u.state = "offline";
         u.join = null;
         save();
@@ -209,9 +178,7 @@ const commands = [
   new SlashCommandBuilder()
     .setName("add")
     .setDescription("Track a Roblox user")
-    .addUserOption(o =>
-      o.setName("user").setDescription("Discord user").setRequired(true)
-    )
+    .addUserOption(o => o.setName("user").setRequired(true))
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
@@ -219,20 +186,14 @@ const commands = [
   new SlashCommandBuilder()
     .setName("remove")
     .setDescription("Remove tracked user")
-    .addUserOption(o =>
-      o.setName("user").setDescription("Discord user").setRequired(true)
-    ),
+    .addUserOption(o => o.setName("user").setRequired(true)),
 
-  new SlashCommandBuilder()
-    .setName("list")
-    .setDescription("List tracked users"),
+  new SlashCommandBuilder().setName("list").setDescription("List tracked users"),
 
   new SlashCommandBuilder()
     .setName("stats")
-    .setDescription("User playtime stats")
-    .addUserOption(o =>
-      o.setName("user").setDescription("User").setRequired(false)
-    ),
+    .setDescription("Show playtime stats")
+    .addUserOption(o => o.setName("user")),
 
   new SlashCommandBuilder()
     .setName("leaderboard")
@@ -240,7 +201,6 @@ const commands = [
     .addStringOption(o =>
       o
         .setName("type")
-        .setDescription("daily / weekly / total")
         .setRequired(true)
         .addChoices(
           { name: "Daily", value: "daily" },
@@ -273,10 +233,7 @@ client.once("ready", () => {
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
   if (!i.guildId)
-    return i.reply({
-      content: "Commands only work in servers",
-      ephemeral: true
-    });
+    return i.reply({ content: "Use this in a server.", ephemeral: true });
 
   const guild = getGuild(i.guildId);
 
@@ -292,7 +249,6 @@ client.on("interactionCreate", async i => {
       channelId: i.channelId,
       state: "offline",
       join: null,
-      lastSession: 0,
       game: null,
       stats: {
         daily: 0,
@@ -343,9 +299,9 @@ client.on("interactionCreate", async i => {
           .setColor(0x3498db)
           .setTitle(u.displayName)
           .setDescription(
-            `📅 Daily: ${fmt(u.stats.daily)}\n📆 Weekly: ${fmt(
+            `Daily: ${fmt(u.stats.daily)}\nWeekly: ${fmt(
               u.stats.weekly
-            )}\n🏆 Total: ${fmt(u.stats.total)}`
+            )}\nTotal: ${fmt(u.stats.total)}`
           )
       ]
     });
@@ -353,23 +309,21 @@ client.on("interactionCreate", async i => {
 
   if (i.commandName === "leaderboard") {
     const type = i.options.getString("type");
-    const entries = Object.entries(guild.tracked)
+    const list = Object.entries(guild.tracked)
       .sort((a, b) => b[1].stats[type] - a[1].stats[type])
-      .slice(0, 10);
+      .slice(0, 10)
+      .map(
+        ([id, u], i) =>
+          `**${i + 1}.** <@${id}> — ${fmt(u.stats[type])}`
+      )
+      .join("\n");
 
     return i.reply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xf39c12)
-          .setTitle(`🏆 ${type.toUpperCase()} Leaderboard`)
-          .setDescription(
-            entries
-              .map(
-                ([id, u], i) =>
-                  `**${i + 1}.** <@${id}> — ${fmt(u.stats[type])}`
-              )
-              .join("\n") || "No data"
-          )
+          .setTitle(`${type.toUpperCase()} Leaderboard`)
+          .setDescription(list || "No data")
       ]
     });
   }
@@ -377,29 +331,16 @@ client.on("interactionCreate", async i => {
   if (i.commandName === "activitycheck") {
     if (
       !isOwner(i.user.id) &&
-      !i.member.permissions.has(
-        PermissionsBitField.Flags.Administrator
-      )
+      !i.member.permissions.has(PermissionsBitField.Flags.Administrator)
     )
       return i.reply({ content: "No permission", ephemeral: true });
 
-    await startActivityCheck(i.channel);
+    const msg = await i.channel.send(
+      "@everyone **ACTIVITY CHECK**\nReact ✅"
+    );
+    await msg.react("✅");
     return i.reply({ content: "Started", ephemeral: true });
   }
-});
-
-// ================== PREFIX ==================
-client.on("messageCreate", m => {
-  if (m.author.bot || m.content !== "!activitycheck") return;
-  if (
-    !isOwner(m.author.id) &&
-    !m.member.permissions.has(
-      PermissionsBitField.Flags.Administrator
-    )
-  )
-    return m.reply("No permission");
-
-  startActivityCheck(m.channel);
 });
 
 // ================== LOGIN ==================
