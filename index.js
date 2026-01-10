@@ -105,7 +105,8 @@ function resolveGame(p) {
 // ===== TRACK LOOP =====
 async function checkUsers() {
   for (const discordId in data.tracked) {
-    const robloxId = data.tracked[discordId];
+    const robloxId = data.tracked[discordId].robloxId;
+const displayName = data.tracked[discordId].displayName;
     const channelId = data.channels[discordId];
     if (!channelId) continue;
 
