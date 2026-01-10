@@ -1,4 +1,4 @@
-// ===== KEEPALIVE (Render / Katabump) =====
+// ===== KEEPALIVE =====
 const express = require("express");
 const app = express();
 app.get("/", (_, res) => res.send("Bot alive"));
@@ -38,9 +38,7 @@ const save = () =>
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 
 // ===== CLIENT =====
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 // ===== ROBLOX API =====
 async function getRobloxUser(username) {
@@ -71,7 +69,7 @@ async function getAvatar(userId) {
   return d.data?.[0]?.imageUrl || null;
 }
 
-// ===== HELPERS =====
+// ===== TIME HELPERS =====
 const dayId = () => new Date().toDateString();
 const weekId = () => {
   const d = new Date();
@@ -120,7 +118,6 @@ async function checkUsers() {
     if (pt.w !== weekId()) (pt.weekly = 0), (pt.w = weekId());
     if (pt.m !== monthId()) (pt.monthly = 0), (pt.m = monthId());
 
-    // OFFLINE → delete embed
     if (!presence || presence.userPresenceType !== 2) {
       if (data.messages[discordId]) {
         await channel.messages
@@ -132,7 +129,6 @@ async function checkUsers() {
       continue;
     }
 
-    // ONLINE → track time
     pt.daily += 60;
     pt.weekly += 60;
     pt.monthly += 60;
@@ -148,7 +144,7 @@ async function checkUsers() {
         { name: "Week", value: fmt(pt.weekly) },
         { name: "Month", value: fmt(pt.monthly) }
       )
-      .setFooter({ text: "Roblox Live Presence • updates every 1 minute" })
+      .setFooter({ text: "Roblox Live Presence • updates every minute" })
       .setTimestamp();
 
     if (data.messages[discordId]) {
@@ -173,8 +169,25 @@ const commands = [
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
   new SlashCommandBuilder()
+    .setName("remove")
+    .setDescription("Stop tracking"),
+  new SlashCommandBuilder()
     .setName("stats")
-    .setDescription("View your playtime stats")
+    .setDescription("View your playtime"),
+  new SlashCommandBuilder()
+    .setName("leaderboard")
+    .setDescription("View leaderboard")
+    .addStringOption(o =>
+      o
+        .setName("type")
+        .setDescription("daily / weekly / monthly")
+        .setRequired(true)
+        .addChoices(
+          { name: "Daily", value: "daily" },
+          { name: "Weekly", value: "weekly" },
+          { name: "Monthly", value: "monthly" }
+        )
+    )
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -210,24 +223,42 @@ client.on("interactionCreate", async i => {
     data.channels[i.user.id] = i.channelId;
     save();
 
-    await i.reply({
-      content: `✅ Tracking **${user.name}**`,
-      ephemeral: true
-    });
+    await i.reply({ content: "✅ Tracking started", ephemeral: true });
+    checkUsers();
+  }
 
-    checkUsers(); // send immediately
+  if (i.commandName === "remove") {
+    delete data.tracked[i.user.id];
+    delete data.playtime[i.user.id];
+    delete data.channels[i.user.id];
+    save();
+    i.reply({ content: "🗑️ Tracking removed", ephemeral: true });
   }
 
   if (i.commandName === "stats") {
     const pt = data.playtime[i.user.id];
     if (!pt)
-      return i.reply({ content: "No data yet.", ephemeral: true });
+      return i.reply({ content: "No data yet", ephemeral: true });
 
     i.reply(
       `📊 **Your Playtime**\nToday: ${fmt(pt.daily)}\nWeek: ${fmt(
         pt.weekly
       )}\nMonth: ${fmt(pt.monthly)}`
     );
+  }
+
+  if (i.commandName === "leaderboard") {
+    const type = i.options.getString("type");
+    const list = Object.entries(data.playtime)
+      .sort((a, b) => b[1][type] - a[1][type])
+      .slice(0, 10)
+      .map(
+        ([id, v], i) =>
+          `**${i + 1}.** <@${id}> — ${fmt(v[type])}`
+      )
+      .join("\n");
+
+    i.reply(`🏆 **${type.toUpperCase()} Leaderboard**\n${list || "No data"}`);
   }
 });
 
