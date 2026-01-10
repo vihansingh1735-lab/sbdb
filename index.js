@@ -348,19 +348,62 @@ client.on("interactionCreate", async i => {
   }
 
   if (i.commandName === "activitycheck") {
-    if (
-      !isOwner(i.user.id) &&
-      !i.member.permissions.has(PermissionsBitField.Flags.Administrator)
-    )
-      return i.reply({ content: "No permission", ephemeral: true });
-
-    const msg = await i.channel.send(
-      "@everyone **ACTIVITY CHECK**\nReact ✅"
-    );
-    await msg.react("✅");
-    return i.reply({ content: "Started", ephemeral: true });
+  if (
+    !isOwner(i.user.id) &&
+    !i.member.permissions.has(PermissionsBitField.Flags.Administrator)
+  ) {
+    return i.reply({ content: "No permission", ephemeral: true });
   }
-});
 
+  const msg = await i.channel.send(
+    `@everyone
+
+**ACTIVITY CHECK**
+
+Let's keep this server alive and thriving!
+React ✅ to show you're active.
+
+🏆 Top 3 responders will be highlighted!
+
+Help us keep the community strong and engaging 💬🎉`
+  );
+
+  await msg.react("✅");
+  await i.reply({ content: "Started", ephemeral: true });
+
+  const winners = new Set();
+
+  const collector = msg.createReactionCollector({
+    filter: (reaction, user) =>
+      reaction.emoji.name === "✅" && !user.bot,
+    time: 10 * 60 * 1000 // 10 minutes
+  });
+
+  collector.on("collect", (_, user) => {
+    winners.add(user.id);
+
+    if (winners.size === 3) {
+      collector.stop("filled");
+    }
+  });
+
+  collector.on("end", () => {
+    if (winners.size < 3) {
+      msg.channel.send(
+        "⏳ Activity check ended — not enough participants."
+      );
+      return;
+    }
+
+    const [first, second, third] = [...winners];
+
+    msg.channel.send(
+      "🏆 **Activity Check Winners**\n\n" +
+      `🥇 <@${first}>\n` +
+      `🥈 <@${second}>\n` +
+      `🥉 <@${third}>`
+    );
+  });
+  }
 // ================== LOGIN ==================
 client.login(TOKEN);
