@@ -260,15 +260,16 @@ Month: ${fmt(pt.monthly)}`
   }
 
   if (i.commandName === "leaderboard") {
-    const t = i.options.getString("type");
-    const list = Object.entries(data.playtime)
-      .sort((a, b) => b[1][t] - a[1][t])
-      .slice(0, 10)
-      .map(([id, v], i) => `**${i + 1}.** <@${id}> — ${fmt(v[t])}`)
-      .join("\n");
+  const t = i.options.getString("type");
+  const list = Object.entries(data.playtime)
+    .sort((a, b) => b[1][t] - a[1][t])
+    .slice(0, 10)
+    .map(([id, v], i) => `**${i + 1}.** <@${id}> — ${fmt(v[t])}`)
+    .join("\n");
 
-    i.reply(`🏆 **${t.toUpperCase()}**\n${list || "No data"}`);
-  }
+  return i.reply(`🏆 **${t.toUpperCase()}**\n${list || "No data"}`);
+}
+
 if (i.commandName === "list") {
   const users = Object.values(data.tracked);
 
@@ -282,7 +283,6 @@ if (i.commandName === "list") {
     await i.channel.send(msg);
   }
 }
-)};
 // ================== PREFIX ==================
 client.on("messageCreate", m => {
   if (m.author.bot || !m.content.startsWith(PREFIX)) return;
