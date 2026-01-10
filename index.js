@@ -125,33 +125,32 @@ async function checkUsers() {
       }
 
       // JOIN
-      if (presence?.userPresenceType === 2) {
-  // If bot restarted or join missing, recover join time
-  if (u.state !== "ingame" || !u.join) {
-    u.state = "ingame";
-    u.join = Date.now();
-    u.game = presence.lastLocation || "Roblox";
-    save();
+      // ================= JOIN =================
+if (presence?.userPresenceType === 2 && u.state !== "ingame") {
+  u.state = "ingame";
+  u.join = Date.now();
+  u.game = presence.lastLocation || "Roblox";
+  save();
 
-    channel.send({
-  embeds: [
-    new EmbedBuilder()
-      .setColor(0x2ecc71)
-      .setTitle(u.displayName)
-      .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`) // ✅ clickable title
-      .setThumbnail(await getAvatar(u.robloxId)) // ✅ avatar thumbnail
-      .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
-      .setTimestamp()
-  ]
-});
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x2ecc71)
+        .setTitle(u.displayName)
+        .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
+        .setThumbnail(await getAvatar(u.robloxId))
+        .setDescription(`🟢 **Joined Game**\n🎮 ${u.game}`)
+        .setTimestamp()
+    ]
+  });
+}
 
-      // LEAVE
-      if (u.state === "ingame" && (!presence || presence.userPresenceType !== 2)) {
+// ================= LEAVE =================
+if (u.state === "ingame" && presence?.userPresenceType !== 2) {
   if (!u.join) {
-    // Safety fallback
     u.state = "offline";
     save();
-    return;
+    continue; // NOT return (return breaks the whole loop)
   }
 
   const played = Math.floor((Date.now() - u.join) / 1000);
@@ -166,20 +165,17 @@ async function checkUsers() {
   save();
 
   channel.send({
-  embeds: [
-    new EmbedBuilder()
-      .setColor(0xe74c3c)
-      .setTitle(u.displayName)
-      .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`) // ✅ clickable title
-      .setThumbnail(await getAvatar(u.robloxId)) // ✅ avatar thumbnail
-      .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
-      .setTimestamp()
-  ]
-});
-      } // <-- closes LEAVE if
-    }   // <-- closes for (did in guild.tracked)
-  }     // <-- closes for (guildId in data.guilds)
-}       // <-- closes checkUsers()
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe74c3c)
+        .setTitle(u.displayName)
+        .setURL(`https://www.roblox.com/users/${u.robloxId}/profile`)
+        .setThumbnail(await getAvatar(u.robloxId))
+        .setDescription(`🔴 **Left Game**\n⏱ ${fmt(played)}`)
+        .setTimestamp()
+    ]
+  });
+}
 
 // ================== SLASH COMMANDS ==================
 const commands = [
