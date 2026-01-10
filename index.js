@@ -223,7 +223,10 @@ client.on("interactionCreate", async i => {
     const user = await getRobloxUser(i.options.getString("username"));
     if (!user) return i.reply({ content: "User not found", ephemeral: true });
 
-    data.tracked[i.user.id] = user.id;
+    data.tracked[i.user.id] = {
+  robloxId: user.id,
+  displayName: user.displayName || user.name
+};
     data.channels[i.user.id] = i.channelId;
     save();
 
