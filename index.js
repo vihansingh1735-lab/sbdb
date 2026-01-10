@@ -1,10 +1,11 @@
-// ===== KEEPALIVE =====
+// ================= KEEPALIVE =================
 const express = require("express");
 const app = express();
 app.get("/", (_, res) => res.send("Bot alive"));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT);
-// ===== IMPORTS =====
+
+// ================= IMPORTS =================
 const {
   Client,
   GatewayIntentBits,
@@ -12,45 +13,51 @@ const {
   REST,
   Routes,
   EmbedBuilder,
-  ActivityType
+  ActivityType,
+  PermissionsBitField
 } = require("discord.js");
 const fs = require("fs");
 
-// ===== CONSTANTS =====
+// ================= CONSTANTS =================
 const CHECK_INTERVAL = 60_000;
 const DATA_FILE = "./data.json";
+const ACTIVITY_DB = "./database.json";
 
-// ===== GAME MAP =====
+// ================= GAME MAP =================
 const GAME_MAP = {
   2534724415: "Emergency Hamburg 🚨",
   4924922222: "Brookhaven 🏡RP",
   920587237: "Adopt Me 🐶",
   2753915549: "Blox Fruits 🍏"
 };
-// ===== ACTIVITY CHECK DB =====
+
+// ================= LOAD DBS =================
+let data = { tracked: {}, channels: {}, messages: {}, playtime: {} };
+if (fs.existsSync(DATA_FILE))
+  data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+
+function saveData() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
 function loadActivityDB() {
   try {
-    return JSON.parse(fs.readFileSync("./database.json", "utf8"));
+    return JSON.parse(fs.readFileSync(ACTIVITY_DB, "utf8"));
   } catch {
     return { activityWins: {}, activityReactCount: {} };
   }
 }
 
 function saveActivityDB(db) {
-  fs.writeFileSync("./database.json", JSON.stringify(db, null, 2));
+  fs.writeFileSync(ACTIVITY_DB, JSON.stringify(db, null, 2));
 }
-// ===== LOAD DATA =====
-let data = { tracked: {}, channels: {}, messages: {}, playtime: {} };
-if (fs.existsSync(DATA_FILE)) {
-  data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-}
-const save = () =>
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 
-// ===== CLIENT =====
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// ================= CLIENT =================
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
-// ===== ROBLOX API =====
+// ================= ROBLOX API =================
 async function getRobloxUser(username) {
   const r = await fetch("https://users.roblox.com/v1/usernames/users", {
     method: "POST",
@@ -79,7 +86,7 @@ async function getAvatar(userId) {
   return d.data?.[0]?.imageUrl || null;
 }
 
-// ===== TIME HELPERS =====
+// ================= HELPERS =================
 const dayId = () => new Date().toDateString();
 const weekId = () => {
   const d = new Date();
@@ -101,7 +108,7 @@ function resolveGame(p) {
   return "Playing Roblox 🎮";
 }
 
-// ===== TRACK LOOP =====
+// ================= TRACK LOOP =================
 async function checkUsers() {
   for (const discordId in data.tracked) {
     const { robloxId, displayName } = data.tracked[discordId];
@@ -130,11 +137,9 @@ async function checkUsers() {
 
     if (!presence || presence.userPresenceType !== 2) {
       if (data.messages[discordId]) {
-        await channel.messages
-          .delete(data.messages[discordId])
-          .catch(() => {});
+        await channel.messages.delete(data.messages[discordId]).catch(() => {});
         delete data.messages[discordId];
-        save();
+        saveData();
       }
       continue;
     }
@@ -165,14 +170,17 @@ async function checkUsers() {
     } else {
       const msg = await channel.send({ embeds: [embed] });
       data.messages[discordId] = msg.id;
-      save();
+      saveData();
     }
   }
 }
-async function startActivityCheck(client, channel, auto = false) {
+
+// ================= ACTIVITY CHECK =================
+async function startActivityCheck(channel) {
   const msg = await channel.send({
-    content: `${auto ? "" : "@everyone"} 📢 **ACTIVITY CHECK STARTED!**\nReact with ✅ to prove you're active.\nFirst **3 unique users** win!`,
-    allowedMentions: auto ? {} : { parse: ["everyone"] }
+    content:
+      "@everyone 📢 **ACTIVITY CHECK STARTED!**\nReact with ✅\nFirst **3 users** win!",
+    allowedMentions: { parse: ["everyone"] }
   });
 
   await msg.react("✅");
@@ -180,12 +188,9 @@ async function startActivityCheck(client, channel, auto = false) {
   const db = loadActivityDB();
   const winners = new Set();
 
-  const filter = (reaction, user) =>
-    reaction.emoji.name === "✅" && !user.bot;
-
   const collector = msg.createReactionCollector({
-    filter,
-    time: 10 * 60 * 1000 // 10 minutes
+    filter: (r, u) => r.emoji.name === "✅" && !u.bot,
+    time: 10 * 60 * 1000
   });
 
   collector.on("collect", (_, user) => {
@@ -194,31 +199,24 @@ async function startActivityCheck(client, channel, auto = false) {
   });
 
   collector.on("end", async (_, reason) => {
-    if (reason !== "DONE") {
-      return channel.send("⏳ Not enough participants. Activity check ended.");
-    }
+    if (reason !== "DONE")
+      return channel.send("⏳ Activity check failed.");
 
-    const top = Array.from(winners).slice(0, 3);
-
+    const top = [...winners].slice(0, 3);
     top.forEach(id => {
       db.activityWins[id] = (db.activityWins[id] || 0) + 1;
       db.activityReactCount[id] =
         (db.activityReactCount[id] || 0) + 1;
     });
-
     saveActivityDB(db);
 
     await channel.send(
-      "🏆 **Activity Check Winners:**\n" +
-      `🥇 <@${top[0]}>\n` +
-      `🥈 <@${top[1]}>\n` +
-      `🥉 <@${top[2]}>`
+      `🏆 **Winners**\n🥇 <@${top[0]}>\n🥈 <@${top[1]}>\n🥉 <@${top[2]}>`
     );
-
-    await channel.send("🎉 Activity check completed!");
   });
 }
-// ===== SLASH COMMANDS =====
+
+// ================= SLASH COMMANDS =================
 const commands = [
   new SlashCommandBuilder()
     .setName("add")
@@ -226,66 +224,56 @@ const commands = [
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
-  new SlashCommandBuilder()
-  .setName("activitycheck")
-  .setDescription("Start an activity check (Admins only)")
-  .setDefaultMemberPermissions(
-    PermissionsBitField.Flags.Administrator
-  ), 
-  new SlashCommandBuilder()
-    .setName("remove")
-    .setDescription("Stop tracking"),
-  new SlashCommandBuilder()
-    .setName("stats")
-    .setDescription("View your playtime"),
+  new SlashCommandBuilder().setName("remove").setDescription("Stop tracking"),
+  new SlashCommandBuilder().setName("stats").setDescription("View playtime"),
   new SlashCommandBuilder()
     .setName("leaderboard")
     .setDescription("View leaderboard")
     .addStringOption(o =>
       o
         .setName("type")
-        .setDescription("daily / weekly / monthly")
         .setRequired(true)
         .addChoices(
           { name: "Daily", value: "daily" },
           { name: "Weekly", value: "weekly" },
           { name: "Monthly", value: "monthly" }
         )
-    )
+    ),
+  new SlashCommandBuilder()
+    .setName("activitycheck")
+    .setDescription("Start activity check")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
 ].map(c => c.toJSON());
 
+// ================= REGISTER =================
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 (async () => {
-  await rest.put(
-    Routes.applicationCommands(process.env.CLIENT_ID),
-    { body: commands }
-  );
+  await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), {
+    body: commands
+  });
 })();
 
-// ===== READY =====
+// ================= READY =================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity("Roblox playtime", {
-    type: ActivityType.Watching
-  });
+  client.user.setActivity("Roblox Activity", { type: ActivityType.Watching });
   setInterval(checkUsers, CHECK_INTERVAL);
 });
 
-// ===== INTERACTIONS =====
+// ================= INTERACTIONS =================
 client.on("interactionCreate", async i => {
   if (!i.isChatInputCommand()) return;
 
   if (i.commandName === "add") {
     const user = await getRobloxUser(i.options.getString("username"));
-    if (!user)
-      return i.reply({ content: "User not found", ephemeral: true });
+    if (!user) return i.reply({ content: "User not found", ephemeral: true });
 
     data.tracked[i.user.id] = {
       robloxId: user.id,
       displayName: user.displayName || user.name
     };
     data.channels[i.user.id] = i.channelId;
-    save();
+    saveData();
 
     await i.reply({ content: "✅ Tracking started", ephemeral: true });
     checkUsers();
@@ -295,19 +283,18 @@ client.on("interactionCreate", async i => {
     delete data.tracked[i.user.id];
     delete data.playtime[i.user.id];
     delete data.channels[i.user.id];
-    save();
+    saveData();
     i.reply({ content: "🗑️ Tracking removed", ephemeral: true });
   }
 
   if (i.commandName === "stats") {
     const pt = data.playtime[i.user.id];
-    if (!pt)
-      return i.reply({ content: "No data yet", ephemeral: true });
+    if (!pt) return i.reply({ content: "No data", ephemeral: true });
 
     i.reply(
-      `📊 **Your Playtime**\nToday: ${fmt(pt.daily)}\nWeek: ${fmt(
-        pt.weekly
-      )}\nMonth: ${fmt(pt.monthly)}`
+      `📊 Today: ${fmt(pt.daily)}\nWeek: ${fmt(pt.weekly)}\nMonth: ${fmt(
+        pt.monthly
+      )}`
     );
   }
 
@@ -324,25 +311,19 @@ client.on("interactionCreate", async i => {
 
     i.reply(`🏆 **${type.toUpperCase()} Leaderboard**\n${list || "No data"}`);
   }
-});
-if (i.commandName === "activitycheck") {
-  if (
-    !i.member.permissions.has(
-      PermissionsBitField.Flags.Administrator
-    )
-  ) {
-    return i.reply({
-      content: "❌ Admin only.",
-      ephemeral: true
-    });
+
+  if (i.commandName === "activitycheck") {
+    if (
+      !i.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
+      return i.reply({ content: "Admin only", ephemeral: true });
+    }
+    await i.reply({ content: "Activity check started!", ephemeral: true });
+    startActivityCheck(i.channel);
   }
+});
 
-  await i.reply({
-    content: "✅ Activity check started!",
-    ephemeral: true
-  });
-
-  startActivityCheck(client, i.channel, false);
-}
-// ===== LOGIN =====
+// ================= LOGIN =================
 client.login(process.env.TOKEN);
