@@ -4,7 +4,7 @@ const app = express();
 app.get("/", (_, res) => res.send("Bot alive"));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT);
-
+const fs = require("fs");
 // ===== IMPORTS =====
 const {
   Client,
@@ -28,7 +28,18 @@ const GAME_MAP = {
   920587237: "Adopt Me 🐶",
   2753915549: "Blox Fruits 🍏"
 };
+// ===== ACTIVITY CHECK DB =====
+function loadActivityDB() {
+  try {
+    return JSON.parse(fs.readFileSync("./database.json", "utf8"));
+  } catch {
+    return { activityWins: {}, activityReactCount: {} };
+  }
+}
 
+function saveActivityDB(db) {
+  fs.writeFileSync("./database.json", JSON.stringify(db, null, 2));
+}
 // ===== LOAD DATA =====
 let data = { tracked: {}, channels: {}, messages: {}, playtime: {} };
 if (fs.existsSync(DATA_FILE)) {
@@ -159,7 +170,55 @@ async function checkUsers() {
     }
   }
 }
+async function startActivityCheck(client, channel, auto = false) {
+  const msg = await channel.send({
+    content: `${auto ? "" : "@everyone"} 📢 **ACTIVITY CHECK STARTED!**\nReact with ✅ to prove you're active.\nFirst **3 unique users** win!`,
+    allowedMentions: auto ? {} : { parse: ["everyone"] }
+  });
 
+  await msg.react("✅");
+
+  const db = loadActivityDB();
+  const winners = new Set();
+
+  const filter = (reaction, user) =>
+    reaction.emoji.name === "✅" && !user.bot;
+
+  const collector = msg.createReactionCollector({
+    filter,
+    time: 10 * 60 * 1000 // 10 minutes
+  });
+
+  collector.on("collect", (_, user) => {
+    winners.add(user.id);
+    if (winners.size === 3) collector.stop("DONE");
+  });
+
+  collector.on("end", async (_, reason) => {
+    if (reason !== "DONE") {
+      return channel.send("⏳ Not enough participants. Activity check ended.");
+    }
+
+    const top = Array.from(winners).slice(0, 3);
+
+    top.forEach(id => {
+      db.activityWins[id] = (db.activityWins[id] || 0) + 1;
+      db.activityReactCount[id] =
+        (db.activityReactCount[id] || 0) + 1;
+    });
+
+    saveActivityDB(db);
+
+    await channel.send(
+      "🏆 **Activity Check Winners:**\n" +
+      `🥇 <@${top[0]}>\n` +
+      `🥈 <@${top[1]}>\n` +
+      `🥉 <@${top[2]}>`
+    );
+
+    await channel.send("🎉 Activity check completed!");
+  });
+}
 // ===== SLASH COMMANDS =====
 const commands = [
   new SlashCommandBuilder()
@@ -168,6 +227,12 @@ const commands = [
     .addStringOption(o =>
       o.setName("username").setDescription("Roblox username").setRequired(true)
     ),
+  new SlashCommandBuilder()
+  .setName("activitycheck")
+  .setDescription("Start an activity check (Admins only)")
+  .setDefaultMemberPermissions(
+    PermissionsBitField.Flags.Administrator
+  ), 
   new SlashCommandBuilder()
     .setName("remove")
     .setDescription("Stop tracking"),
@@ -261,6 +326,24 @@ client.on("interactionCreate", async i => {
     i.reply(`🏆 **${type.toUpperCase()} Leaderboard**\n${list || "No data"}`);
   }
 });
+if (i.commandName === "activitycheck") {
+  if (
+    !i.member.permissions.has(
+      PermissionsBitField.Flags.Administrator
+    )
+  ) {
+    return i.reply({
+      content: "❌ Admin only.",
+      ephemeral: true
+    });
+  }
 
+  await i.reply({
+    content: "✅ Activity check started!",
+    ephemeral: true
+  });
+
+  startActivityCheck(client, i.channel, false);
+}
 // ===== LOGIN =====
 client.login(process.env.TOKEN);
