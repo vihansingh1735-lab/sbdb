@@ -4,7 +4,6 @@ const app = express();
 app.get("/", (_, res) => res.send("Bot alive"));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT);
-const fs = require("fs");
 // ===== IMPORTS =====
 const {
   Client,
