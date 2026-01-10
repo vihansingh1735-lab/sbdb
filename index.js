@@ -201,6 +201,7 @@ const commands = [
     .addStringOption(o =>
       o
         .setName("type")
+        .setDescription ("type of lb") 
         .setRequired(true)
         .addChoices(
           { name: "Daily", value: "daily" },
