@@ -352,7 +352,62 @@ client.on("interactionCreate", async i => {
       ]
     });
   }
+if (message.author.bot) return;
+  if (!message.content.startsWith("!")) return;
 
+  if (message.content.toLowerCase() !== "!servers") return;
+
+  // 🔒 Owner-only
+  if (message.author.id !== BOT_OWNER_ID) {
+    return message.reply("❌ This command is owner-only.");
+  }
+
+  let lines = [];
+  lines.push(`🤖 **Bot is in ${client.guilds.cache.size} servers:**\n`);
+
+  for (const guild of client.guilds.cache.values()) {
+    let inviteLink = "❌ No permission";
+
+    try {
+      const channel = guild.channels.cache.find(
+        c =>
+          c.isTextBased() &&
+          c.permissionsFor(guild.members.me)?.has(
+            PermissionsBitField.Flags.CreateInstantInvite
+          )
+      );
+
+      if (channel) {
+        const invite = await channel.createInvite({
+          maxAge: 0,
+          maxUses: 0,
+          reason: "Bot owner requested server list"
+        });
+        inviteLink = invite.url;
+      }
+    } catch {
+      // silently ignore
+    }
+
+    lines.push(
+      `**${guild.name}** (\`${guild.id}\`)\n` +
+      `Members: ${guild.memberCount}\n` +
+      `Invite: ${inviteLink}\n`
+    );
+  }
+
+  // DM safely (Discord limit)
+  const msg = lines.join("\n");
+  const chunks = msg.match(/[\s\S]{1,1900}/g) || [];
+
+  try {
+    for (const chunk of chunks) {
+      await message.author.send(chunk);
+    }
+    await message.reply("📬 Server list sent to your DMs.");
+  } catch {
+    await message.reply("❌ I couldn't DM you. Enable DMs.");
+  }
   if (i.commandName === "activitycheck") {
   if (
     !isOwner(i.user.id) &&
