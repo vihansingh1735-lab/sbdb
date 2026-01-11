@@ -13,8 +13,7 @@ const {
   REST,
   Routes,
   EmbedBuilder,
-  ActivityType, 
-  MessageBuilder
+  ActivityType,
 } = require("discord.js");
 const fs = require("fs");
 
@@ -94,7 +93,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.GuildMessageReactions, 
+    GatewayIntentBits.MessageContent
   ]
 });
 
