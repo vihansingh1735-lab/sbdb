@@ -249,9 +249,22 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 // ================== READY ==================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity("Roblox Presence", {
-    type: ActivityType.Watching
-  });
+
+  const updateStatus = () => {
+    const servers = client.guilds.cache.size;
+
+    client.user.setActivity(`/add | ${servers} Servers`, {
+      type: ActivityType.Watching
+    });
+  };
+
+  // Set immediately
+  updateStatus();
+
+  // Update every 60 seconds
+  setInterval(updateStatus, 60_000);
+
+  // Your existing loop
   setInterval(checkUsers, CHECK_INTERVAL);
 });
 
